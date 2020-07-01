@@ -56,12 +56,12 @@ if not os.path.exists(dump_dir):
     os.mkdir(dump_dir)
 
 if cfg_del_stop_words:
-    freq_min_for_word_choice=5 
+    freq_min_for_word_choice=5
     # freq_min_for_word_choice=10 #best
 else:
     freq_min_for_word_choice=1 # for bert+
 
-valid_data_taux = 0.05 
+valid_data_taux = 0.05
 test_data_taux = 0.10
 
 # word co-occurence with context windows
@@ -69,8 +69,8 @@ window_size = 20
 if cfg_ds in ('mr','sst','cola'):
     window_size = 1000 # use whole sentence
 
-tfidf_mode='only_tf'  
-# tfidf_mode='all_tfidf' 
+tfidf_mode='only_tf'
+# tfidf_mode='all_tfidf'
 
 # 在clean doc时是否使用bert_tokenizer分词, data3时不用更好
 cfg_use_bert_tokenizer_at_clean=True
@@ -129,7 +129,7 @@ if cfg_ds=='sst':
             all_text.append(line[1])
         dataset["label"] = label
         dataset["data"] = all_text
-    
+
     label2idx = {label:i for i,label in enumerate(testset['label'])}
     idx2label = {i:label for i,label in enumerate(testset['label'])}
     corpus=trainset['data']+validset['data']+testset['data']
@@ -156,7 +156,57 @@ elif cfg_ds=='cola':
     # 获得confidence
     y_prob=np.eye(len(y), len(label2idx))[y]
     corpus_size=len(y)
+
+elif cfg_ds=='twitter_cil':
+    from get_sst_data import DataReader
+    train, valid, test = DataReader("data/SST-2/train.txt","./data/SST-2/dev.txt","./data/SST-2/test.txt").read()
+
+    with open("data/tweets/train.txt") as reader:
+        raw_data = reader.readlines()
+
+    train = []
+
+    for raw in raw_data:
+        raw = raw.strip()
+
+        label = int(raw[0])
+        assert label == 0 or label == 1
+        raw = raw[1:]
+        string = raw.strip(" \n\t")
+
+        string.lower()
+
+        train.append((label, string))
     
+    train = random.shuffle(train)
+    length = len(train)
+    valid = train[8*(length//10):9*(length//10)]
+    test = train[9*(length//10):]
+    train = train[:8*(length//10)]
+
+    train_size=len(train)
+    valid_size=len(valid)
+    test_size=len(test)
+    print('SST-2, train_size:%d, valid_size:%d, test_size:%d'%(train_size,valid_size,test_size))
+    trainset = {}
+    validset = {}
+    testset = {}
+    for data, dataset in [(train, trainset), (valid, validset), (test, testset)]:
+        label = []
+        all_text = []
+        for line in data:
+            label.append(line[0])
+            all_text.append(line[1])
+        dataset["label"] = label
+        dataset["data"] = all_text
+
+    label2idx = {label:i for i,label in enumerate(testset['label'])}
+    idx2label = {i:label for i,label in enumerate(testset['label'])}
+    corpus=trainset['data']+validset['data']+testset['data']
+    y=np.array(trainset['label']+validset['label']+testset['label'])
+    corpus_size=len(corpus)
+    y_prob=np.eye(corpus_size,len(label2idx))[y]
+
 #%%
 doc_content_list=[]
 for t in corpus:
@@ -336,13 +386,13 @@ for doc_words in train_valid_docs:
         word_set_train_valid.add(word)
 vocab_train_valid = list(word_set_train_valid)
 vocab_train_valid_size = len(vocab_train_valid)
-    
+
 #%%
 # a map for word -> doc_list
 if tfidf_mode=='all_tf_train_valid_idf':
     for_idf_docs = train_valid_docs
 else:
-    for_idf_docs = shuffled_clean_docs 
+    for_idf_docs = shuffled_clean_docs
 word_doc_list = {}
 for i in range(len(for_idf_docs)):
     doc_words = for_idf_docs[i]
@@ -500,10 +550,10 @@ for i in range(n_docs):
         key = str(i) + ',' + str(j)
         tf = doc_word_freq[key]
         tfidf_row.append(i)
-        if i < train_size: 
+        if i < train_size:
             row.append(i)
         else:
-            row.append(i + vocab_size) 
+            row.append(i + vocab_size)
         tfidf_col.append(j)
         col.append(train_size + j)
         # smooth
@@ -517,7 +567,7 @@ for i in range(n_docs):
     if len(tfidf_vec)>0:
         weight.extend(tfidf_vec)
         tfidf_weight.extend(tfidf_vec)
-    
+
 #%%
 '''
 Assemble adjacency matrix and dump to files
@@ -527,7 +577,7 @@ node_size = vocab_size + corpus_size
 adj_list = []
 adj_list.append(sp.csr_matrix((weight, (row, col)), shape=(node_size, node_size), dtype=np.float32))
 for i,adj in enumerate(adj_list):
-    adj_list[i] = adj + adj.T.multiply(adj.T > adj) - adj.multiply(adj.T > adj) 
+    adj_list[i] = adj + adj.T.multiply(adj.T > adj) - adj.multiply(adj.T > adj)
     adj_list[i].setdiag(1.0)
 
 vocab_adj=sp.csr_matrix((vocab_adj_weight, (vocab_adj_row, vocab_adj_col)), shape=(vocab_size, vocab_size), dtype=np.float32)
@@ -597,5 +647,5 @@ if will_dump_objects:
         pkl.dump(vocab_adj_tf, f)
     with open(dump_dir+"/data_%s.shuffled_clean_docs"%cfg_ds, 'wb') as f:
         pkl.dump(shuffled_clean_docs, f)
-        
+
 print('Data prepared, spend %.2f s'%(time.time()-start))

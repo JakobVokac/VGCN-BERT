@@ -68,19 +68,19 @@ l2_decay=args.l2
 dataset_list={'sst', 'cola'}
 # hate: 10k, mr: 6753, sst: 7792, r8: 5211
 
-total_train_epochs = 9 
+total_train_epochs = 9
 dropout_rate = 0.2  #0.5 # Dropout rate (1 - keep probability).
 if cfg_ds=='sst':
-    batch_size = 16 #12   
-    learning_rate0 = 1e-5 #2e-5  
+    batch_size = 16 #12
+    learning_rate0 = 1e-5 #2e-5
     # l2_decay = 0.001
     l2_decay = 0.01 #default
 elif cfg_ds=='cola':
     batch_size = 16 #12
-    learning_rate0 = 8e-6 #2e-5  
-    l2_decay = 0.001 
+    learning_rate0 = 8e-6 #2e-5
+    l2_decay = 0.001
 
-MAX_SEQ_LENGTH = 200+gcn_embedding_dim 
+MAX_SEQ_LENGTH = 200+gcn_embedding_dim
 gradient_accumulation_steps = 1
 bert_model_scale = 'bert-base-uncased'
 do_lower_case = True
@@ -130,7 +130,7 @@ print('\n----- Prepare data set -----')
 print('  Load/shuffle/seperate',cfg_ds,'dataset, and vocabulary graph adjacent matrix')
 
 objects=[]
-names = [ 'labels','train_y','train_y_prob', 'valid_y','valid_y_prob','test_y','test_y_prob', 'shuffled_clean_docs','vocab_adj_tf','vocab_adj_pmi','vocab_map'] 
+names = [ 'labels','train_y','train_y_prob', 'valid_y','valid_y_prob','test_y','test_y_prob', 'shuffled_clean_docs','vocab_adj_tf','vocab_adj_pmi','vocab_map']
 for i in range(len(names)):
     datafile="./"+data_dir+"/data_%s.%s"%(cfg_ds,names[i])
     with open(datafile, 'rb') as f:
@@ -251,7 +251,7 @@ def predict(model, examples, tokenizer, batch_size):
                 score_out=torch.nn.functional.softmax(score_out,dim=-1)
             predict_out.extend(score_out.max(1)[1].tolist())
             confidence_out.extend(score_out.max(1)[0].tolist())
-            
+
     return np.array(predict_out).reshape(-1), np.array(confidence_out).reshape(-1)
 
 def evaluate(model, gcn_adj_list,predict_dataloader, batch_size, epoch_th, dataset_name):
@@ -348,11 +348,11 @@ for epoch in range(start_epoch, total_train_epochs):
     for step, batch in enumerate(train_dataloader):
         if prev_save_step >-1:
             if step<=prev_save_step: continue
-        if prev_save_step >-1: 
+        if prev_save_step >-1:
             prev_save_step=-1
         batch = tuple(t.to(device) for t in batch)
         input_ids, input_mask, segment_ids, y_prob, label_ids, gcn_swop_eye = batch
-        
+
         logits = model(gcn_adj_list, gcn_swop_eye, input_ids, segment_ids, input_mask)
 
         if cfg_loss_criterion=='mse':
@@ -393,6 +393,8 @@ for epoch in range(start_epoch, total_train_epochs):
                     'valid_acc': valid_acc, 'lower_case': do_lower_case,
                     'perform_metrics':perform_metrics}
         torch.save(to_save, os.path.join(output_dir, model_file_save))
+        config = open("config.txt","w")
+        config.write(str(bert_model_scale) + ", state_dict=[insert_state_dict], gcn_adj_dim="+ str(gcn_vocab_size) + ", gcn_adj_num="+ str(len(gcn_adj_list))+ ", gcn_embedding_dim="+ str(gcn_embedding_dim) +", num_labels=" + str(len(label2idx)))
         # valid_acc_prev = valid_acc
         perform_metrics_prev = perform_metrics
         test_f1_when_valid_best=test_f1
@@ -402,3 +404,16 @@ for epoch in range(start_epoch, total_train_epochs):
 print('\n**Optimization Finished!,Total spend:',(time.time() - train_start)/60.0)
 print("**Valid weighted F1: %.3f at %d epoch."%(100*perform_metrics_prev,valid_f1_best_epoch))
 print("**Test weighted F1 when valid best: %.3f"%(100*test_f1_when_valid_best))
+
+print("Now predicting submissions:")
+
+with open("data/tweets/test.txt","r+") as f:
+    dataset = []
+
+    for raw in f.readlines():
+        raw.lower()
+        dataset.append(raw)
+
+    logits = model(gcn_adj_list,gcn_swop_eye,input_ids,  segment_ids, input_mask)
+    #TODO: UNFINISHED CODE
+#TODO: find out how to make test cases into input ids and pass them through the model
