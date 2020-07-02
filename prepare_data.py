@@ -156,7 +156,37 @@ elif cfg_ds=='cola':
     # 获得confidence
     y_prob=np.eye(len(y), len(label2idx))[y]
     corpus_size=len(y)
-    
+
+else: # it is tweets
+    from get_sst_data import DataReader
+
+    train, valid, test = DataReader("data/tweets/train.txt", "./data/tweet/dev.txt", "./data/tweets/test.txt").read()
+    random.shuffle(train)
+    random.shuffle(valid)
+    random.shuffle(test)
+    train_size = len(train)
+    valid_size = len(valid)
+    test_size = len(test)
+    print('SST-2, train_szie:%d, valid_size:%d, test_size:%d' % (train_size, valid_size, test_size))
+    trainset = {}
+    validset = {}
+    testset = {}
+    for data, dataset in [(train, trainset), (valid, validset), (test, testset)]:
+        label = []
+        all_text = []
+        for line in data:
+            label.append(line[0])
+            all_text.append(line[1])
+        dataset["label"] = label
+        dataset["data"] = all_text
+
+    label2idx = {label: i for i, label in enumerate(testset['label'])}
+    idx2label = {i: label for i, label in enumerate(testset['label'])}
+    corpus = trainset['data'] + validset['data'] + testset['data']
+    y = np.array(trainset['label'] + validset['label'] + testset['label'])
+    corpus_size = len(corpus)
+    y_prob = np.eye(corpus_size, len(label2idx))[y]
+
 #%%
 doc_content_list=[]
 for t in corpus:
